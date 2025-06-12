@@ -35,6 +35,14 @@
       background-color: #fff;
       border-radius: 8px;
     }
+    .chart-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .chart-controls {
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -44,9 +52,19 @@
     <select id="zoneSelect" disabled></select>
   </p>
 
-  <h3>Totaux annuels</h3>
+  <h3>Total des fréquentations sur une année complète</h3>
   <canvas id="sumChart" width="800" height="300"></canvas>
-  <h3>Moyennes annuelles (valeurs valides uniquement)</h3>
+
+  <p>
+    <label for="avgTypeSelect">Moyenne :</label>
+    <select id="avgTypeSelect">
+      <option value="annuelle">annuelle par site</option>
+      <option value="journaliere_zone">quotidienne par zone</option>
+      <option value="journaliere_site">quotidienne par site</option>
+    </select>
+  </p>
+
+  <h3>Moyennes annuelles</h3>
   <canvas id="avgChart" width="800" height="300"></canvas>
 
   <h2>Fréquentations mensuelles par zone</h2>
@@ -55,10 +73,21 @@
     <select id="zoneMonthSelect" disabled></select>
   </p>
 
-  <h3>Totaux mensuels</h3>
+  <h3>Total des fréquentations mensuels (cumulé sur les années étudiées - 2007-2024)</h3>
   <canvas id="monthlySumChart" width="800" height="300"></canvas>
-  <h3>Moyennes mensuelles (valeurs valides uniquement)</h3>
-  <canvas id="monthlyAvgChart" width="800" height="300"></canvas>
+
+  <h3>Moyennes mensuelles des fréquentations (cumulé sur les années étudiées - 2007-2024) </h3>
+  <div class="chart-container">
+    <div class="chart-controls">
+      <label for="avgTypeMonthSelect">Moyenne :</label>
+      <select id="avgTypeMonthSelect">
+        <option value="mensuelle">Mensuel par site</option>
+        <option value="journaliere_zone">Quotidien par zone</option>
+        <option value="journaliere_site">Quotidien par sites</option>
+      </select>
+    </div>
+    <canvas id="monthlyAvgChart" width="800" height="300"></canvas>
+  </div>
 
   <script>
     const yearCSV = "https://raw.githubusercontent.com/aodrenne/Zone_annee/main/somme_annees_8-20h.csv";
@@ -67,6 +96,7 @@
     let fullData = {}, validSiteCounts = {};
     let monthlyData = {}, validMonthCounts = {};
     const monthNames = ["Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"];
+    const daysInMonth = [31,28,31,30,31,30,31,31,30,31,30,31];
 
     function movingAverage(data, windowSize = 3) {
       return data.map((_, i) => {
@@ -78,25 +108,56 @@
     }
 
     function createChart(ctx, label, values, avg, trend, color, labels) {
+      const roundedValues = values.map(v => Math.round(v));
+      const roundedAvg = Math.round(avg);
+      const roundedTrend = trend.map(v => Math.round(v));
+
       new Chart(ctx, {
         type: 'bar',
         data: {
           labels: labels,
           datasets: [
-            { label, data: values, backgroundColor: color },
-            { label: 'Moyenne', data: Array(values.length).fill(avg), type: 'line', borderColor: 'green', borderDash: [5,5], fill: false, pointRadius: 0 },
-            { label: 'Tendance', data: trend, type: 'line', borderColor: 'red', fill: false, pointRadius: 0 }
+            { label, data: roundedValues, backgroundColor: color },
+            { label: 'Moyenne', data: Array(roundedValues.length).fill(roundedAvg), type: 'line', borderColor: 'green', borderDash: [5,5], fill: false, pointRadius: 0 },
+            { label: 'Tendance', data: roundedTrend, type: 'line', borderColor: 'red', fill: false, pointRadius: 0 }
           ]
         },
-        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: value => Math.round(value)
+              }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const label = ctx.dataset.label || '';
+                  const value = Math.round(ctx.parsed.y);
+                  return `${label}: ${value}`;
+                }
+              }
+            }
+          }
+        }
       });
     }
 
     function updateCharts(zone) {
+      const type = document.getElementById("avgTypeSelect").value;
       const years = Object.keys(fullData[zone]).sort();
       const totals = years.map(year => fullData[zone][year]);
       const counts = years.map(year => validSiteCounts[zone][year] || 0);
-      const averages = years.map((year, i) => counts[i] > 0 ? totals[i] / counts[i] : 0);
+      const averages = years.map((year, i) => {
+        if (counts[i] === 0) return 0;
+        if (type === "annuelle") return totals[i] / counts[i];
+        if (type === "journaliere_zone") return totals[i] / 365;
+        if (type === "journaliere_site") return (totals[i] / counts[i]) / 365;
+      });
 
       document.getElementById("sumChart").replaceWith(document.getElementById("sumChart").cloneNode());
       document.getElementById("avgChart").replaceWith(document.getElementById("avgChart").cloneNode());
@@ -106,9 +167,15 @@
     }
 
     function updateMonthlyCharts(zone) {
+      const type = document.getElementById("avgTypeMonthSelect").value;
       const totals = monthNames.map(month => monthlyData[zone][month] || 0);
       const counts = monthNames.map(month => validMonthCounts[zone][month] || 0);
-      const averages = monthNames.map((month, i) => counts[i] > 0 ? totals[i] / counts[i] : 0);
+      const averages = monthNames.map((month, i) => {
+        if (counts[i] === 0) return 0;
+        if (type === "mensuelle") return totals[i] / counts[i];
+        if (type === "journaliere_zone") return totals[i] / daysInMonth[i];
+        if (type === "journaliere_site") return (totals[i] / counts[i]) / daysInMonth[i];
+      });
 
       document.getElementById("monthlySumChart").replaceWith(document.getElementById("monthlySumChart").cloneNode());
       document.getElementById("monthlyAvgChart").replaceWith(document.getElementById("monthlyAvgChart").cloneNode());
@@ -148,6 +215,7 @@
           });
           zoneSelect.disabled = false;
           zoneSelect.addEventListener("change", () => updateCharts(zoneSelect.value));
+          document.getElementById("avgTypeSelect").addEventListener("change", () => updateCharts(zoneSelect.value));
           if (zoneSelect.value) updateCharts(zoneSelect.value);
         }
       });
@@ -183,12 +251,12 @@
           });
           select.disabled = false;
           select.addEventListener("change", () => updateMonthlyCharts(select.value));
+          document.getElementById("avgTypeMonthSelect").addEventListener("change", () => updateMonthlyCharts(select.value));
           if (select.value) updateMonthlyCharts(select.value);
         }
       });
     }
 
-    // Initial load
     loadYearlyData();
     loadMonthlyData();
   </script>
