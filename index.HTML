@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fréquentations par zone</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f6fa;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    h2, h3 {
+      text-align: center;
+      color: #2c3e50;
+    }
+    label {
+      font-weight: bold;
+      margin-right: 10px;
+    }
+    select {
+      padding: 6px 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    p { text-align: center; margin: 20px; }
+    canvas {
+      display: block;
+      margin: 0 auto 40px;
+      background-color: #fff;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Fréquentations par zone</h2>
+  <p>
+    <label for="zoneSelect">Choisir une zone :</label>
+    <select id="zoneSelect" disabled></select>
+  </p>
+
+  <h3>Totaux annuels</h3>
+  <canvas id="sumChart" width="800" height="300"></canvas>
+  <h3>Moyennes annuelles (valeurs valides uniquement)</h3>
+  <canvas id="avgChart" width="800" height="300"></canvas>
+
+  <h2>Fréquentations mensuelles par zone</h2>
+  <p>
+    <label for="zoneMonthSelect">Choisir une zone :</label>
+    <select id="zoneMonthSelect" disabled></select>
+  </p>
+
+  <h3>Totaux mensuels</h3>
+  <canvas id="monthlySumChart" width="800" height="300"></canvas>
+  <h3>Moyennes mensuelles (valeurs valides uniquement)</h3>
+  <canvas id="monthlyAvgChart" width="800" height="300"></canvas>
+
+  <script>
+    const yearCSV = "https://raw.githubusercontent.com/aodrenne/Zone_annee/main/somme_annees_8-20h.csv";
+    const monthCSV = "https://raw.githubusercontent.com/aodrenne/Zone_mois/refs/heads/main/somme_mois_8-20h.csv";
+
+    let fullData = {}, validSiteCounts = {};
+    let monthlyData = {}, validMonthCounts = {};
+    const monthNames = ["Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+    function movingAverage(data, windowSize = 3) {
+      return data.map((_, i) => {
+        const start = Math.max(0, i - Math.floor(windowSize / 2));
+        const end = Math.min(data.length, i + Math.ceil(windowSize / 2));
+        const window = data.slice(start, end).filter(v => v > 0);
+        return window.length ? window.reduce((a, b) => a + b, 0) / window.length : 0;
+      });
+    }
+
+    function createChart(ctx, label, values, avg, trend, color, labels) {
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label, data: values, backgroundColor: color },
+            { label: 'Moyenne', data: Array(values.length).fill(avg), type: 'line', borderColor: 'green', borderDash: [5,5], fill: false, pointRadius: 0 },
+            { label: 'Tendance', data: trend, type: 'line', borderColor: 'red', fill: false, pointRadius: 0 }
+          ]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    function updateCharts(zone) {
+      const years = Object.keys(fullData[zone]).sort();
+      const totals = years.map(year => fullData[zone][year]);
+      const counts = years.map(year => validSiteCounts[zone][year] || 0);
+      const averages = years.map((year, i) => counts[i] > 0 ? totals[i] / counts[i] : 0);
+
+      document.getElementById("sumChart").replaceWith(document.getElementById("sumChart").cloneNode());
+      document.getElementById("avgChart").replaceWith(document.getElementById("avgChart").cloneNode());
+
+      createChart(document.getElementById("sumChart").getContext("2d"), `Total – ${zone}`, totals, totals.reduce((a,b)=>a+b,0)/totals.length, movingAverage(totals), '#4e79a7', years);
+      createChart(document.getElementById("avgChart").getContext("2d"), `Moyenne – ${zone}`, averages, averages.reduce((a,b)=>a+b,0)/averages.filter(v=>v>0).length, movingAverage(averages), '#f28e2b', years);
+    }
+
+    function updateMonthlyCharts(zone) {
+      const totals = monthNames.map(month => monthlyData[zone][month] || 0);
+      const counts = monthNames.map(month => validMonthCounts[zone][month] || 0);
+      const averages = monthNames.map((month, i) => counts[i] > 0 ? totals[i] / counts[i] : 0);
+
+      document.getElementById("monthlySumChart").replaceWith(document.getElementById("monthlySumChart").cloneNode());
+      document.getElementById("monthlyAvgChart").replaceWith(document.getElementById("monthlyAvgChart").cloneNode());
+
+      createChart(document.getElementById("monthlySumChart").getContext("2d"), `Total – ${zone}`, totals, totals.reduce((a,b)=>a+b,0)/totals.length, movingAverage(totals), '#4e79a7', monthNames);
+      createChart(document.getElementById("monthlyAvgChart").getContext("2d"), `Moyenne – ${zone}`, averages, averages.reduce((a,b)=>a+b,0)/averages.filter(v=>v>0).length, movingAverage(averages), '#f28e2b', monthNames);
+    }
+
+    function loadYearlyData() {
+      Papa.parse(yearCSV, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function (results) {
+          fullData = {}; validSiteCounts = {};
+          const data = results.data;
+          const yearCols = Object.keys(data[0]).filter(k => /^\d{4}$/.test(k));
+          data.forEach(row => {
+            const zone = row["Zone"]?.trim();
+            if (!zone || !['I','N','R','Rh'].includes(zone)) return;
+            fullData[zone] ??= {};
+            validSiteCounts[zone] ??= {};
+            yearCols.forEach(year => {
+              const val = parseInt(row[year]);
+              if (!isNaN(val) && val > 0) {
+                fullData[zone][year] = (fullData[zone][year] || 0) + val;
+                validSiteCounts[zone][year] = (validSiteCounts[zone][year] || 0) + 1;
+              }
+            });
+          });
+
+          const zoneSelect = document.getElementById("zoneSelect");
+          zoneSelect.innerHTML = '';
+          Object.keys(fullData).sort().forEach(zone => {
+            const opt = new Option(zone, zone);
+            zoneSelect.appendChild(opt);
+          });
+          zoneSelect.disabled = false;
+          zoneSelect.addEventListener("change", () => updateCharts(zoneSelect.value));
+          if (zoneSelect.value) updateCharts(zoneSelect.value);
+        }
+      });
+    }
+
+    function loadMonthlyData() {
+      Papa.parse(monthCSV, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function (results) {
+          monthlyData = {}; validMonthCounts = {};
+          const data = results.data;
+          data.forEach(row => {
+            let zone = row["Zone"]?.trim()?.toUpperCase();
+            if (!zone) return;
+            monthlyData[zone] ??= {};
+            validMonthCounts[zone] ??= {};
+            monthNames.forEach(month => {
+              const val = parseInt(row[month]);
+              if (!isNaN(val) && val > 0) {
+                monthlyData[zone][month] = (monthlyData[zone][month] || 0) + val;
+                validMonthCounts[zone][month] = (validMonthCounts[zone][month] || 0) + 1;
+              }
+            });
+          });
+
+          const select = document.getElementById("zoneMonthSelect");
+          select.innerHTML = '';
+          Object.keys(monthlyData).sort().forEach(zone => {
+            const opt = new Option(zone, zone);
+            select.appendChild(opt);
+          });
+          select.disabled = false;
+          select.addEventListener("change", () => updateMonthlyCharts(select.value));
+          if (select.value) updateMonthlyCharts(select.value);
+        }
+      });
+    }
+
+    // Initial load
+    loadYearlyData();
+    loadMonthlyData();
+  </script>
+</body>
+</html>
