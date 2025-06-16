@@ -195,7 +195,7 @@
           const yearCols = Object.keys(data[0]).filter(k => /^\d{4}$/.test(k));
           data.forEach(row => {
             const zone = row["Zone"]?.trim();
-            if (!zone || !['I','N','R','Rh'].includes(zone)) return;
+            if (!zone || !['Illkirch/Neuhof,'Robertsau','Rohrschollen'].includes(zone)) return;
             fullData[zone] ??= {};
             validSiteCounts[zone] ??= {};
             yearCols.forEach(year => {
