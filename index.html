@@ -76,7 +76,7 @@
   <h3>Total des fréquentations mensuels (cumulé sur les années étudiées - 2007-2024)</h3>
   <canvas id="monthlySumChart" width="800" height="300"></canvas>
 
-  <h3>Moyennes mensuelles des fréquentations (cumulé sur les années étudiées - 2007-2024) </h3>
+  <h3>Moyennes mensuelles des fréquentations (cumulé sur les années étudiées - 2007-2024)</h3>
   <div class="chart-container">
     <div class="chart-controls">
       <label for="avgTypeMonthSelect">Moyenne :</label>
@@ -105,10 +105,6 @@
         const window = data.slice(start, end).filter(v => v > 0);
         return window.length ? window.reduce((a, b) => a + b, 0) / window.length : 0;
       });
-    }
-
-    function capitalize(str) {
-      return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
     function createChart(ctx, label, values, avg, trend, color, labels) {
@@ -199,7 +195,7 @@
           const yearCols = Object.keys(data[0]).filter(k => /^\d{4}$/.test(k));
           data.forEach(row => {
             const zone = row["Zone"]?.trim();
-            if (!zone || !['Illkirch/Neuhof', 'Robertsau', 'Rohrschollen'].includes(zone)) return;
+            if (!zone) return;
             fullData[zone] ??= {};
             validSiteCounts[zone] ??= {};
             yearCols.forEach(year => {
@@ -234,7 +230,7 @@
           monthlyData = {}; validMonthCounts = {};
           const data = results.data;
           data.forEach(row => {
-            let zone = row["Zone"]?.trim(); // Pas de toUpperCase ici
+            const zone = row["Zone"]?.trim(); // ⚠️ aucune transformation ici
             if (!zone) return;
             monthlyData[zone] ??= {};
             validMonthCounts[zone] ??= {};
