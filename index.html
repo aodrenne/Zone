@@ -107,6 +107,10 @@
       });
     }
 
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
     function createChart(ctx, label, values, avg, trend, color, labels) {
       const roundedValues = values.map(v => Math.round(v));
       const roundedAvg = Math.round(avg);
@@ -195,7 +199,7 @@
           const yearCols = Object.keys(data[0]).filter(k => /^\d{4}$/.test(k));
           data.forEach(row => {
             const zone = row["Zone"]?.trim();
-            if (!zone || !['Illkirch/Neuhof,'Robertsau','Rohrschollen'].includes(zone)) return;
+            if (!zone || !['illkirch/neuhof', 'robertsau', 'rohrschollen'].includes(zone)) return;
             fullData[zone] ??= {};
             validSiteCounts[zone] ??= {};
             yearCols.forEach(year => {
@@ -230,7 +234,7 @@
           monthlyData = {}; validMonthCounts = {};
           const data = results.data;
           data.forEach(row => {
-            let zone = row["Zone"]?.trim()?.toUpperCase();
+            let zone = row["Zone"]?.trim(); // Pas de toUpperCase ici
             if (!zone) return;
             monthlyData[zone] ??= {};
             validMonthCounts[zone] ??= {};
